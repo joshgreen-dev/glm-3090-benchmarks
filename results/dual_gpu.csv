@@ -1,0 +1,4 @@
+context,vllm_tp2_both_cards_tok_s,ollama_single_card_tok_s
+4096,55.9,88.5
+32768,46.5,43.8
+115000,36.0,17.0

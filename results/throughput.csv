@@ -1,0 +1,5 @@
+concurrency,vllm_tp2_aggregate_tok_s
+ollama_1_stream,88
+8,247
+16,371
+32,498

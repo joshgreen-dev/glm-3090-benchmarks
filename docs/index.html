@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLM-4.7-Flash on 2x RTX 3090 — raw benchmarks</title>
+<meta name="description" content="Decode speed, prefill, VRAM, 200K context and one card versus two for GLM-4.7-Flash on 2x RTX 3090, against qwen3.5:27b. Raw numbers and scripts.">
+<style>
+ body{font:16px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:900px;margin:0 auto;padding:0 20px 80px;color:#1f2328;background:#fff}
+ h1{font-size:1.9rem;border-bottom:1px solid #d0d7de;padding-bottom:.3em;margin-top:1em}
+ h2{font-size:1.35rem;border-bottom:1px solid #eaecef;padding-bottom:.25em;margin-top:1.7em}
+ code{background:#eff1f3;padding:2px 6px;border-radius:5px;font-size:.9em}
+ pre{background:#f6f8fa;padding:14px;border-radius:8px;overflow:auto}
+ table{border-collapse:collapse;margin:1em 0;font-size:.92rem}
+ th,td{border:1px solid #d0d7de;padding:6px 13px;text-align:left}
+ th{background:#f6f8fa}
+ img{max-width:100%;border:1px solid #eaecef;border-radius:8px;margin:1em 0}
+ a{color:#0969da;text-decoration:none}
+ a:hover{text-decoration:underline}
+ .sub{color:#59636e;font-size:.9rem}
+</style>
+</head>
+<body>
+<p class="sub">joshgreen-dev / <strong>glm-3090-benchmarks</strong> · reproducible LLM benchmarks · MIT · <a href="https://github.com/joshgreen-dev/glm-3090-benchmarks">source on GitHub</a></p>
+
+<h1>GLM-4.7-Flash on 2x RTX 3090: the raw benchmarks</h1>
+
+<p>Every number behind my writeup, plus the scripts to reproduce them, measured on a two-card desktop
+rather than a server. I ran this to decide what to actually run on the hardware behind
+<a href="https://modeldirectory.org">ModelDirectory</a>, whose backend leans on local GPUs, so
+"does this model earn its place" is a cost question and not a hobby.</p>
+
+<h2>Hardware</h2>
+<ul>
+<li>2x NVIDIA RTX 3090, 24 GB GDDR6X each (48 GB total)</li>
+<li>Ryzen 5 3600X, ASUS PRIME B450-PLUS</li>
+<li>No NVLink, P2P disabled on the consumer cards, measured card-to-card link about 1.4 GB/s</li>
+<li>Driver 580.159.03 / CUDA 13.0, ollama 0.20.5, vLLM 0.23.0 (TP=2)</li>
+<li>Model: <code>glm-4.7-flash</code> Q4-class GGUF, arch <code>glm4moelite</code>, 29.9B params (about 3B active), max context 202,752</li>
+</ul>
+
+<h2>1. Decode speed vs context (tokens/sec)</h2>
+<table><thead><tr><th>context</th><th>GLM-4.7-Flash (MLA)</th><th>qwen3.5:27b (GQA)</th><th>GLM on the mini-PC</th></tr></thead>
+<tbody>
+<tr><td>4K</td><td>88.5</td><td>34.3</td><td>7.3</td></tr>
+<tr><td>16K</td><td>61.6</td><td>32.4</td><td>2.1</td></tr>
+<tr><td>32K</td><td>43.8</td><td>30.9</td><td>1.1</td></tr>
+<tr><td>64K</td><td>28.3</td><td>29.3</td><td>0.6</td></tr>
+<tr><td>128K</td><td>16.8</td><td>24.4</td><td>out of memory</td></tr>
+</tbody></table>
+<img src="charts/speed-vs-context.png" alt="Decode speed vs context: GLM starts high and decays, Qwen stays flat, they cross near 64K">
+<img src="charts/the-3090-leap.png" alt="Same GLM model on the mini-PC versus the RTX 3090, about twelve times faster on the 3090">
+
+<h2>2. Prefill (prompt ingest) vs context (tokens/sec)</h2>
+<table><thead><tr><th>context</th><th>GLM prefill</th><th>Qwen prefill</th></tr></thead>
+<tbody>
+<tr><td>4K</td><td>2626</td><td>979</td></tr>
+<tr><td>16K</td><td>1849</td><td>947</td></tr>
+<tr><td>32K</td><td>1308</td><td>899</td></tr>
+<tr><td>64K</td><td>805</td><td>780</td></tr>
+<tr><td>128K</td><td>450</td><td>631</td></tr>
+</tbody></table>
+
+<h2>3. VRAM vs context (GB) — the MLA payoff</h2>
+<table><thead><tr><th>context</th><th>GLM</th><th>Qwen</th></tr></thead>
+<tbody>
+<tr><td>4K</td><td>19.5</td><td>22.8</td></tr>
+<tr><td>16K</td><td>20.2</td><td>23.4</td></tr>
+<tr><td>32K</td><td>21.2</td><td>24.1</td></tr>
+<tr><td>64K</td><td>23.2</td><td>27.4</td></tr>
+<tr><td>128K</td><td>27.7</td><td>31.5</td></tr>
+</tbody></table>
+<p>The 24 GB line is one RTX 3090's ceiling. GLM stays under it almost the whole way and uses 27.7 GB at 128K
+against Qwen's 31.5, so it packs more context onto one card before spilling to the second. That is MLA working.</p>
+<img src="charts/vram-vs-context.png" alt="GPU memory vs context: GLM stays under the 24 GB single-card line longer than Qwen">
+
+<h2>4. One card vs two (vLLM TP=2), plus throughput</h2>
+<table><thead><tr><th>context</th><th>vLLM TP=2 (both cards)</th><th>ollama (single card)</th><th>winner</th></tr></thead>
+<tbody>
+<tr><td>4K</td><td>55.9</td><td>88.5</td><td>ollama (link tax)</td></tr>
+<tr><td>32K</td><td>46.5</td><td>43.8</td><td>about even (crossover)</td></tr>
+<tr><td>~115K</td><td>36.0</td><td>~17 (128K)</td><td>vLLM TP=2, about 2.1x</td></tr>
+</tbody></table>
+<p>Throughput under concurrency (both cards): 8 streams give 247, 16 give 371, 32 give 498 tokens a second
+aggregate, against ollama's roughly 88 single-stream. So both cards win serving load by about 5 to 6 times.</p>
+<img src="charts/dual-gpu.png" alt="One card wins short context, two cards win long context and throughput">
+
+<h2>5. q8 KV cache (does not help)</h2>
+<p>Tried a q8 KV cache to squeeze more context onto one card. It was slower at every depth from the dequant
+overhead (37.5 vs 43.8 at 32K, 13.4 vs 16.8 at 128K), and MLA's cache is already small enough that it did not
+earn its keep. Leave it at the f16 default on this hardware.</p>
+
+<h2>6. 200K context</h2>
+<p>Packed the pair near the 202,752 ceiling, planted a passphrase near the top, and asked for it at the end.
+It answered correctly. The capacity is real on 48 GB of RTX 3090, the only question is decode speed that deep.</p>
+
+<h2>Reproduce</h2>
+<pre>git clone https://github.com/joshgreen-dev/glm-3090-benchmarks
+cd glm-3090-benchmarks
+./run_decode.sh      # ollama sweep, per-context tok/s and VRAM
+./run_vllm_tp2.sh    # vLLM tensor-parallel, single-stream and throughput</pre>
+<p>Raw CSVs are in <code>results/</code>. If you want the tools I actually build with this hardware, the model
+side is <a href="https://modeldirectory.org">ModelDirectory</a> (a 3D model search engine) and the 3D side is
+<a href="https://geometryviewer.com">GeometryViewer</a> (a browser 3D viewer). Both exist because running things
+yourself, carefully, is still cheaper than renting when you measure it honestly.</p>
+
+<hr>
+<p class="sub">MIT licensed. Built by Josh Green while figuring out what to run locally.</p>
+</body>
+</html>
