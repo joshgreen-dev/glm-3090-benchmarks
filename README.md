@@ -1,6 +1,6 @@
 # glm-3090-benchmarks
 
-Benchmark scripts and the raw numbers behind running GLM-4.7-Flash on a pair of RTX 3090s, measured against a plain grouped-query model (qwen3.5:27b) as a control. I ran all of this to decide what to actually run on my own hardware for [ModelDirectory](https://modeldirectory.org), whose backend leans on local GPUs rather than rented ones, so "does this model earn its place" is a cost question for me.
+Benchmark scripts and the raw numbers behind running GLM-4.7-Flash on a pair of RTX 3090s, measured against a plain grouped-query model (qwen3.5:27b) as a control. I ran all of this to decide what is actually worth running on my own hardware rather than on rented GPUs, where "does this model earn its place" is a cost question for me.
 
 Full writeup with charts: https://joshgreen-dev.github.io/glm-3090-benchmarks/
 
